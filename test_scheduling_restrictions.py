@@ -7,6 +7,6 @@ sample_data = { "Anna": [1,2,3,4],
 
 
 def test_potential_shifts():
-    assert sr.potential_shifts(sample_data) == [["Anna_0", "Anna_1", "Anna_2",],
-                                                ["Bill_0", "Bill_1", "Bill_2", "Bill_3"],
-                                                ["Chris_0", "Chris_1", "Chris_2", "Chris_3"]]
+    assert sr.potential_shifts(sample_data) == {"Anna": ["Anna_0", "Anna_1", "Anna_2",],
+                                                "Bill": ["Bill_0", "Bill_1", "Bill_2", "Bill_3"],
+                                                "Chris": ["Chris_0", "Chris_1", "Chris_2", "Chris_3"]}

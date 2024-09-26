@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dimod import ConstrainedQuadraticModel
+from dimod import ConstrainedQuadraticModel, Binary
 from dwave.system import LeapHybridCQMSampler
-from functools import reduce
-from operator import add
+from functools import reduce, partial
+from operator import itemgetter
+
 
 # Set the solver we're going to use
 def set_sampler():
@@ -50,9 +51,70 @@ def potential_shifts(employees):
 
     def generate_shifts(employee):
         name, preferences = employee
-        return [[f"{name}_{shift}" for shift in name_to_working_shifts.get(name, [0, 1, 2, 3])]]
+        shifts = name_to_working_shifts.get(name, [0, 1, 2, 3])
+        return {name: [f"{name}_{shift}" for shift in shifts]}
 
-    return reduce(add, map(generate_shifts, employees.items()))
+    def concat_employee_info(employee1, employee2):
+        return employee1 | employee2
+
+    return reduce(concat_employee_info, map(generate_shifts, employees.items()))
+
+
+def add_shift_constraint(shift_preferences, model, employee):
+    """
+    Args:
+        shift_preferences: a collection of key value pairs containing the name of an employee and their preferences
+        for all the shifts
+        employee: a given employee containing their name and shifts they can work
+
+    Returns: returns a new model containing the constraints associated with the current employee
+    """
+    print(employee)
+    name, shifts = employee
+    model.add_discrete(shifts, label=f"{name}")
+    model.objective.add_linear_from([*zip(shifts, shift_preferences.get(name))])
+
+    return model
+
+
+def add_bill_and_frank_constraint(model, shifts):
+    """
+    Args:
+        model:
+        shifts: a collection of two series, depicting the shifts Bill and Frank can take on
+
+    Returns: adds a new constraint to the model which forbids Bill and Frank from working together on the
+    same shift
+    """
+    def update_shift_constraint(model, shift):
+        frank_shift, bill_shift, idx = shift
+        x, y = Binary(frank_shift), Binary(bill_shift)
+        model.add_constraint_from_model(x + y, "==", 0, f"shift_{idx}")
+        return model
+
+    frank_shifts = shifts[0]
+    bill_shifts = shifts[1]
+    return reduce(update_shift_constraint,
+                  zip(frank_shifts, bill_shifts, range(len(bill_shifts))),
+                  model)
+
+
+def add_constraints(model, shifts, shift_preferences):
+    """
+    Args:
+        model: the model used to model the constraints on the shifts
+        shifts: a list of key-value pairs containing the employee name and the shifts the employee could take on
+        shift_preferences: the preference each employee has towards the potential shifts
+
+    Returns: a model containing constraints reflecting the preferences of the given employees
+    """
+    add_constraint = partial(add_shift_constraint, shift_preferences)
+    updated_model = reduce(add_constraint, shifts.items(), model)
+    return updated_model
+    # return add_bill_and_frank_constraint(updated_model,
+    #                                      itemgetter("Frank", "Bill")(shifts))
+
+
 
 # Create CQM object
 def build_cqm():
@@ -65,6 +127,9 @@ def build_cqm():
     cqm = ConstrainedQuadraticModel()
 
     labels = potential_shifts(employees)
+
+    updated_cqm = add_constraints(cqm, labels, employees)
+    return updated_cqm
     # for employee, preference in preferences.items():
     #     # Create labels for binary variables
     #     labels = [f"x_{employee}_{shift}" for shift in range(num_shifts)]
@@ -75,11 +140,6 @@ def build_cqm():
     #     # Incrementally add objective terms as list of (label, bias)
     #     cqm.objective.add_linear_from([*zip(labels, preference)])
 
-    # TODO: Restrict Anna from working shift 4
-
-    # TODO: Set constraints to reflect the restrictions in the README.
-
-    # return cqm
 
 # Solve the problem
 def solve_problem(cqm, sampler):
@@ -94,6 +154,7 @@ def solve_problem(cqm, sampler):
     # Filter for feasible samples
     feasible_sampleset = sampleset.filter(lambda x:x.is_feasible)
 
+    print(feasible_sampleset)
     return feasible_sampleset
 
 # Process solution
@@ -103,13 +164,13 @@ def process_sampleset(sampleset):
     # Get the first solution
     sample = sampleset.first.sample
 
-    shift_schedule=[ [] for i in range(4)]
+    shift_schedule=[ [] for _ in range(4)]
 
     # Interpret according to shifts
     for key, val in sample.items():
          if val == 1.0:
-            name = key.split('_')[1]
-            shift = int(key.split('_')[2])
+            name = key.split('_')[0]
+            shift = int(key.split('_')[1])
             shift_schedule[shift].append(name)
 
     return shift_schedule
@@ -128,7 +189,7 @@ if __name__ == "__main__":
     sampleset = solve_problem(cqm, sampler)
 
     shift_schedule = process_sampleset(sampleset)
-
+    #
     for i in range(num_shifts):
         print("Shift:", shifts[i], "\tEmployee(s): ", shift_schedule[i])
-
+    #
