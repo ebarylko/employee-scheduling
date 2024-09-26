@@ -14,14 +14,14 @@
 
 from dimod import ConstrainedQuadraticModel
 from dwave.system import LeapHybridCQMSampler
+from functools import reduce
+from operator import add
 
 # Set the solver we're going to use
 def set_sampler():
     '''Returns a dimod sampler'''
 
-    sampler = LeapHybridCQMSampler()
-
-    return sampler
+    return LeapHybridCQMSampler()
 
 # Set employees and preferences
 def employee_preferences():
@@ -38,33 +38,48 @@ def employee_preferences():
 
     return preferences
 
+
+def potential_shifts(employees):
+    """
+    Args:
+        employees: a collection of employees, each containing a name and their preferences for all shifts
+
+    Returns: a collection of potential shifts for each employee
+    """
+    name_to_working_shifts = {'Anna': [0, 1, 2]}
+
+    def generate_shifts(employee):
+        name, preferences = employee
+        return [[f"{name}_{shift}" for shift in name_to_working_shifts.get(name, [0, 1, 2, 3])]]
+
+    return reduce(add, map(generate_shifts, employees.items()))
+
 # Create CQM object
 def build_cqm():
     '''Builds the CQM for our problem'''
 
-    preferences = employee_preferences()
+    employees = employee_preferences()
     num_shifts = 4
 
     # Initialize the CQM object
     cqm = ConstrainedQuadraticModel()
 
-    # Represent shifts as a set of binary variables
-    # for each employee
-    for employee, preference in preferences.items():
-        # Create labels for binary variables
-        labels = [f"x_{employee}_{shift}" for shift in range(num_shifts)]
-    
-        # Add a discrete constraint over employee binaries
-        cqm.add_discrete(labels, label=f"discrete_{employee}")
-
-        # Incrementally add objective terms as list of (label, bias)
-        cqm.objective.add_linear_from([*zip(labels, preference)])
+    labels = potential_shifts(employees)
+    # for employee, preference in preferences.items():
+    #     # Create labels for binary variables
+    #     labels = [f"x_{employee}_{shift}" for shift in range(num_shifts)]
+    #
+    #     # Add a discrete constraint over employee binaries
+    #     cqm.add_discrete(labels, label=f"discrete_{employee}")
+    #
+    #     # Incrementally add objective terms as list of (label, bias)
+    #     cqm.objective.add_linear_from([*zip(labels, preference)])
 
     # TODO: Restrict Anna from working shift 4
 
     # TODO: Set constraints to reflect the restrictions in the README.
 
-    return cqm
+    # return cqm
 
 # Solve the problem
 def solve_problem(cqm, sampler):
@@ -116,3 +131,4 @@ if __name__ == "__main__":
 
     for i in range(num_shifts):
         print("Shift:", shifts[i], "\tEmployee(s): ", shift_schedule[i])
+

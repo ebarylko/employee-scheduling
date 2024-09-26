@@ -87,6 +87,7 @@ if __name__ == "__main__":
 
     # Interpret according to shifts
     for key, val in sample.items():
+        print(key, val)
         if val ==1.0:
             name = key.split('_')[1]
             shift = int(key.split('_')[2])

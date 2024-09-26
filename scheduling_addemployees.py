@@ -27,14 +27,14 @@ def set_sampler():
 def employee_preferences():
     '''Returns a dictionary of employees with their preferences'''
 
-    preferences = { "Anna": [1,2,3,4],
-                    "Bill": [3,2,1,4],
-                    "Chris": [4,2,3,1],
-                    "Diane": [4,1,2,3]}
-
-    # TODO: Add additional employees with preferences
-
-    return preferences
+    return {"Anna": [1,2,3,4],
+            "Bill": [3,2,1,4],
+            "Chris": [4,2,3,1],
+            "Diane": [4,1,2,3],
+            "Erik": [1,3,2,4],
+            "Francis": [4,3,2,1],
+            "Greta": [2,1,4,3],
+            "Harry": [3,2,1,4]}
 
 
 # Create CQM object
