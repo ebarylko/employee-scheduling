@@ -110,9 +110,8 @@ def add_constraints(model, shifts, shift_preferences):
     """
     add_constraint = partial(add_shift_constraint, shift_preferences)
     updated_model = reduce(add_constraint, shifts.items(), model)
-    return updated_model
-    # return add_bill_and_frank_constraint(updated_model,
-    #                                      itemgetter("Frank", "Bill")(shifts))
+    return add_bill_and_frank_constraint(updated_model,
+                                         itemgetter("Frank", "Bill")(shifts))
 
 
 
