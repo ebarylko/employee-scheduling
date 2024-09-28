@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dimod import ConstrainedQuadraticModel, Binary
+from dimod import ConstrainedQuadraticModel, Binaries
 from dwave.system import LeapHybridCQMSampler
 from functools import reduce, partial
 from operator import itemgetter
@@ -28,7 +28,7 @@ def set_sampler():
 def employee_preferences():
     '''Returns a dictionary of employees with their preferences'''
 
-    preferences = { "Anna": [1,2,3,4],
+    preferences = { "Anna": [1,2,3,100],
                     "Bill": [3,2,1,4],
                     "Chris": [4,2,3,1],
                     "Diane": [4,1,2,3],
@@ -47,12 +47,10 @@ def potential_shifts(employees):
 
     Returns: a collection of potential shifts for each employee
     """
-    name_to_working_shifts = {'Anna': [0, 1, 2]}
 
     def generate_shifts(employee):
         name, preferences = employee
-        shifts = name_to_working_shifts.get(name, [0, 1, 2, 3])
-        return {name: [f"{name}_{shift}" for shift in shifts]}
+        return {name: [f"{name}_{shift}" for shift in [0, 1, 2, 3]]}
 
     def concat_employee_info(employee1, employee2):
         return employee1 | employee2
@@ -69,7 +67,6 @@ def add_shift_constraint(shift_preferences, model, employee):
 
     Returns: returns a new model containing the constraints associated with the current employee
     """
-    print(employee)
     name, shifts = employee
     model.add_discrete(shifts, label=f"{name}")
     model.objective.add_linear_from([*zip(shifts, shift_preferences.get(name))])
@@ -88,8 +85,7 @@ def add_bill_and_frank_constraint(model, shifts):
     """
     def update_shift_constraint(model, shift):
         frank_shift, bill_shift, idx = shift
-        x, y = Binary(frank_shift), Binary(bill_shift)
-        model.add_constraint_from_model(x + y, "==", 0, f"shift_{idx}")
+        model.add_constraint_from_iterable([(frank_shift, bill_shift, 1)], "==", 0)
         return model
 
     frank_shifts = shifts[0]
@@ -97,6 +93,44 @@ def add_bill_and_frank_constraint(model, shifts):
     return reduce(update_shift_constraint,
                   zip(frank_shifts, bill_shifts, range(len(bill_shifts))),
                   model)
+
+
+def harriet_and_erica_constraint(model, shifts):
+    """
+    Args:
+        model:
+        shifts: a collection of two series, depicting the shifts Harriet and Erica can take on
+
+    Returns: adds a new constraint to the model which awards Harriet and Erica being on the same shift
+
+    """
+    def update_shift_constraint(model, shift):
+        harriet_shift, erica_shift = shift
+        model.add_constraint_from_iterable([(harriet_shift, 1), (erica_shift, -1)], "==", 0)
+        return model
+
+    harriet_shifts = shifts[0]
+    erica_shifts = shifts[1]
+    return reduce(update_shift_constraint,
+                  zip(harriet_shifts, erica_shifts),
+                  model)
+
+
+def add_two_employees_per_shift_constraint(model, employee_shifts):
+    """
+    Args:
+        model: a model representing the constraints for scheduling employee shifts
+        employee_shifts: the shifts each employee can be in
+
+    Returns: updates the model with a constraint that two employees must be on every shift
+    """
+    def limit_shift_to_two_employees(constraint_model, employees_in_shift):
+        constraint_model.add_constraint_from_iterable([(employee, 1) for employee in employees_in_shift],
+                                                      "==",
+                                                      rhs=2)
+        return constraint_model
+
+    return reduce(limit_shift_to_two_employees, zip(*employee_shifts), model)
 
 
 def add_constraints(model, shifts, shift_preferences):
@@ -110,25 +144,24 @@ def add_constraints(model, shifts, shift_preferences):
     """
     add_constraint = partial(add_shift_constraint, shift_preferences)
     updated_model = reduce(add_constraint, shifts.items(), model)
-    return add_bill_and_frank_constraint(updated_model,
+    new_model = harriet_and_erica_constraint(updated_model, itemgetter("Harriet", "Erica")(shifts))
+    new_model2 = add_bill_and_frank_constraint(new_model,
                                          itemgetter("Frank", "Bill")(shifts))
-
+    return add_two_employees_per_shift_constraint(new_model2, shifts.values())
 
 
 # Create CQM object
 def build_cqm():
     '''Builds the CQM for our problem'''
 
-    employees = employee_preferences()
-    num_shifts = 4
+    employees_and_shift_preference = employee_preferences()
 
     # Initialize the CQM object
     cqm = ConstrainedQuadraticModel()
 
-    labels = potential_shifts(employees)
+    labels = potential_shifts(employees_and_shift_preference)
 
-    updated_cqm = add_constraints(cqm, labels, employees)
-    return updated_cqm
+    return add_constraints(cqm, labels, employees_and_shift_preference)
     # for employee, preference in preferences.items():
     #     # Create labels for binary variables
     #     labels = [f"x_{employee}_{shift}" for shift in range(num_shifts)]
@@ -153,7 +186,6 @@ def solve_problem(cqm, sampler):
     # Filter for feasible samples
     feasible_sampleset = sampleset.filter(lambda x:x.is_feasible)
 
-    print(feasible_sampleset)
     return feasible_sampleset
 
 # Process solution
